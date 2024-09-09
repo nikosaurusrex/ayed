@@ -1,0 +1,9 @@
+test
+fuzzer_test
+profile_test
+.vscode
+*.dSYM
+*.obj
+*.exe
+*.pdb
+*.ilk
