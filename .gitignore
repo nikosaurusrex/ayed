@@ -7,3 +7,5 @@ profile_test
 *.exe
 *.pdb
 *.ilk
+compile_flags.txt
+out.jpg

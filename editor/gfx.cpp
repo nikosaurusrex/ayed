@@ -64,6 +64,8 @@ compile_shader(String8 src, GLenum type, const char *stage_name)
    }
 
    free(c_str);
+
+   return shader;
 }
 
 void
