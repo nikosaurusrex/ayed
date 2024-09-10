@@ -8,4 +8,7 @@ set RELEASE_FLAGS_X64=/O2 /GL
 
 set PROFILER_FLAGS=
 
-cl.exe %TEST_FLAGS% %DEBUG_FLAGS% %CFLAGS% /I./ editor/main.cpp /Fe:editor
+set COMPILE_FLAGS=/I./ /I ./vendor/glfw/include /I ./vendor/glew/include /I ./vendor/freetype/include
+set LINK_FLAGS=/LIBPATH:./vendor/glfw/libs /LIBPATH:./vendor/glew/libs /LIBPATH:./vendor/freetype/libs glfw3_mt.lib glew32s.lib freetype.lib opengl32.lib user32.lib gdi32.lib shell32.lib kernel32.lib
+
+cl.exe %TEST_FLAGS% %DEBUG_FLAGS% %CFLAGS% %COMPILE_FLAGS% editor/main.cpp /link %LINK_FLAGS% /OUT:editor.exe
