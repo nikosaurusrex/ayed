@@ -1,18 +1,55 @@
 #include "window.h"
 
 intern void
-on_frame_buffer_resize(GLFWwindow *handle, int width, int height)
+window_on_frame_buffer_resize(GLFWwindow *handle, int width, int height)
 {
    Window *window = (Window *)glfwGetWindowUserPointer(handle);
    ASSERT(window);
 
    window->width = width;
    window->height = height;
+
+   WindowCallbacks callbacks = window->callbacks;
+   WindowResizeCallbackFn callback = callbacks.resize;
+
+   if (callback != 0) {
+      callback(callbacks.ctx, width, height);
+   }
+}
+
+intern void
+window_on_key_event(GLFWwindow *handle, int key, int scancode, int action, int mods)
+{
+   Window *window = (Window *)glfwGetWindowUserPointer(handle);
+   ASSERT(window);
+
+   WindowCallbacks callbacks = window->callbacks;
+   WindowKeyCallbackFn callback = callbacks.key;
+
+   if (callback != 0) {
+      callback(callbacks.ctx, key, scancode, action, mods);
+   }
+}
+
+intern void
+window_on_char_event(GLFWwindow *handle, unsigned int codepoint)
+{
+   Window *window = (Window *)glfwGetWindowUserPointer(handle);
+   ASSERT(window);
+
+   WindowCallbacks callbacks = window->callbacks;
+   WindowCharCallbackFn callback = callbacks.chr;
+
+   if (callback != 0) {
+      callback(callbacks.ctx, codepoint);
+   }
 }
 
 void
 init_window(Window *window, const char *title)
 {
+   window->callbacks = {};
+
    if (!glfwInit()) {
       log_fatal("Failed to initialize GLFW");
    }
@@ -36,7 +73,10 @@ init_window(Window *window, const char *title)
    glfwSetWindowUserPointer(window->handle, window);
 
    glfwGetFramebufferSize(window->handle, &window->width, &window->height);
-   glfwSetFramebufferSizeCallback(window->handle, on_frame_buffer_resize);
+
+   glfwSetFramebufferSizeCallback(window->handle, window_on_frame_buffer_resize);
+   glfwSetKeyCallback(window->handle, window_on_key_event);
+   glfwSetCharCallback(window->handle, window_on_char_event);
 }
 
 void
@@ -60,13 +100,7 @@ update_window(Window *window)
 }
 
 void
-set_key_callback(Window *window, window_key_callback_fn callback)
+set_window_callbacks(Window *window, WindowCallbacks callbacks)
 {
-   glfwSetKeyCallback(window->handle, callback);
-}
-
-void
-set_char_callback(Window *window, window_char_callback_fn callback)
-{
-   glfwSetCharCallback(window->handle, callback);
+   window->callbacks = callbacks;
 }
