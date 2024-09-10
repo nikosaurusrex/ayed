@@ -23,15 +23,22 @@ struct Renderer
    GFX_Shader shader;
 };
 
+struct OutputTexture
+{
+   GLuint id;
+   U32 width;
+   U32 height;
+};
+
 intern Renderer
 create_renderer(Arena *arena)
 {
    static const float vertices[] = {
       // 3d pos + 2d tex coord
-      1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
-      1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
-      -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
-      -1.0f, 1.0f, 0.0f, 0.0f, 1.0f
+      1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+      1.0f, -1.0f, 1.0f, 1.0f, 0.0f,
+      -1.0f, -1.0f, 1.0f, 0.0f, 0.0f,
+      -1.0f, 1.0f, 1.0f, 0.0f, 1.0f
    };
 
    static const U32 indices[] = {
@@ -54,6 +61,7 @@ create_renderer(Arena *arena)
    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), 0);
+   glEnableVertexAttribArray(0);
    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(3 * sizeof(float)));
    glEnableVertexAttribArray(1);
 
@@ -79,12 +87,12 @@ destroy_renderer(Renderer r)
 }
 
 intern void
-render_text(Renderer r, GLuint texture)
+render_to_screen(Renderer r, OutputTexture tex)
 {
    glUseProgram(r.shader.id);
 
    glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, texture);
+   glBindTexture(GL_TEXTURE_2D, tex.id);
 
    glBindVertexArray(r.vao);
 
@@ -94,20 +102,39 @@ render_text(Renderer r, GLuint texture)
    glUseProgram(0);
 }
 
-intern GLuint
+intern void
+render_to_texture(GFX_Shader compute_shader, OutputTexture tex)
+{
+   glUseProgram(compute_shader.id);
+
+   glBindImageTexture(0, tex.id, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+
+   U32 dx = (tex.width + 15) / 16;
+   U32 dy = (tex.height + 15) / 16;
+   glDispatchCompute(dx, dy, 1);
+
+   glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+   glUseProgram(0);
+}
+
+intern OutputTexture
 create_output_texture(GlyphMap gm, U32 window_width, U32 window_height)
 {
+   OutputTexture tex = {};
+
    U32 w = window_width;
    U32 h = window_height;
 
    U32 gx = 8;
    U32 gy = 8;
 
-   GLuint tex;
+   tex.width = gx * gm.metrics.width;
+   tex.height = gy * gm.metrics.height;
 
-   glGenTextures(1, &tex);
-   glBindTexture(GL_TEXTURE_2D, tex);
-   glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA32F, gx * gm.metrics.width, gy * gm.metrics.height);
+   glGenTextures(1, &tex.id);
+   glBindTexture(GL_TEXTURE_2D, tex.id);
+   glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA32F, tex.width, tex.height);
    glBindTexture(GL_TEXTURE_2D, 0);
 
    return tex;
@@ -131,12 +158,13 @@ main(int argc, char **argv)
    Renderer renderer = create_renderer(&arena);
 
    // TODO: handle resize
-   GLuint output_texture = create_output_texture(glyph_map, window.width, window.height);
+   OutputTexture output_texture = create_output_texture(glyph_map, window.width, window.height);
 
    while (!should_close_window(&window)) {
       glClear(GL_COLOR_BUFFER_BIT);
 
-      render_text(renderer, tex);
+      render_to_texture(compute_shader, output_texture);
+      render_to_screen(renderer, output_texture);
 
       update_window(&window);
    }

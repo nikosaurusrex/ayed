@@ -6,5 +6,8 @@ layout(rgba32f, binding=0) uniform image2D output_texture;
 void
 main()
 {
-   uvec2 pixel = gl_GlobalInvocationID.xy;
+   ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+
+   vec4 color = vec4(1.0, 0.0, 0.0, 1.0);
+   imageStore(output_texture, pixel, color);
 }
