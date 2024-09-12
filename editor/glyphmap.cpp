@@ -9,6 +9,7 @@ enum
 {
    GM_COUNT_X = 32,
    GM_COUNT_Y = 16,
+   GM_ASCII_START = ' ',
 };
 
 intern GlyphMetrics
@@ -72,10 +73,10 @@ load_glyphmap(Arena *arena, const char *font_name, U32 font_size, FT_Library fre
    gm.data = push_array(arena, U8, gm.width * gm.height);
 
    // Load ascii chars
-   U32 ascii_chars_count = ('~' - ' ') + 1;
+   U32 ascii_chars_count = ('~' - GM_ASCII_START) + 1;
 
    for (U32 i = 0; i < ascii_chars_count; ++i) {
-      U32 codepoint = (U32)(' ' + i);
+      U32 codepoint = (U32)(GM_ASCII_START + i);
 
       FT_UInt glyph_index = FT_Get_Char_Index(face, codepoint);
       FT_Int32 load_flags = FT_LOAD_TARGET_LCD;
@@ -125,4 +126,17 @@ load_glyphmap(Arena *arena, const char *font_name, U32 font_size, FT_Library fre
    stbi_write_jpg("out.jpg", gm.width / 3, gm.height, 3, gm.data, 100);
 
    return gm;
+}
+
+U32
+load_glyph(GlyphMap *gm, U32 codepoint)
+{
+   if_likely(codepoint < 128) {
+      codepoint -= GM_ASCII_START;
+      U32 x = codepoint % GM_COUNT_X;
+      U32 y = codepoint / GM_COUNT_X;
+      return (x << 16) | y;
+   }
+
+   return '?' - GM_ASCII_START;
 }

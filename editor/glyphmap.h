@@ -18,3 +18,5 @@ struct GlyphMap
 intern FT_Library init_freetype();
 intern void release_freetype(FT_Library lib);
 intern GlyphMap load_glyphmap(Arena *arena, const char *font_name, U32 font_size, FT_Library freetype);
+
+intern U32 load_glyph(GlyphMap *gm, U32 codepoint);

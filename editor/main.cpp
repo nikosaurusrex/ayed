@@ -51,7 +51,7 @@ struct WinEventCtx
    RenderSize *render_size;
    OutputTexture *output_texture;
    GFX_Shader compute_shader;
-   GlyphMap glyph_map;
+   GlyphMap *glyph_map;
    GLuint cells_ssbo;
    Cell *cells;
 };
@@ -113,7 +113,7 @@ destroy_renderer(Renderer r)
 }
 
 intern void
-render_to_cells(Cell *cells, RenderSize *rs)
+render_to_cells(GlyphMap *gm, Cell *cells, RenderSize *rs)
 {
    const char *text = "int main() {\n\treturn 0;\n}";
 
@@ -125,7 +125,7 @@ render_to_cells(Cell *cells, RenderSize *rs)
 
    for (U32 i = 0; i < strlen(text); ++i) {
       U8 codepoint = text[i];
-      U8 glyph = codepoint - ' ';
+      U32 glyph = load_glyph(gm, codepoint);
       if (codepoint == '\t') {
          cx += 4;
       } else if (codepoint == '\n') {
@@ -190,9 +190,9 @@ init_render_size(RenderSize *rs, GFX_Shader s)
 }
 
 intern void
-update_render_size(RenderSize *rs, GlyphMap gm, GFX_Shader s, U32 window_width, U32 window_height)
+update_render_size(RenderSize *rs, GlyphMap *gm, GFX_Shader s, U32 window_width, U32 window_height)
 {
-   GlyphMetrics m = gm.metrics; 
+   GlyphMetrics m = gm->metrics; 
 
    glUseProgram(s.id);
 
@@ -261,7 +261,7 @@ create_glyph_map_texture(GFX_Shader s)
 }
 
 intern void
-update_glyph_map_texture(GLuint tex, GlyphMap gm)
+update_glyph_map_texture(GLuint tex, GlyphMap *gm)
 {
    glBindTexture(GL_TEXTURE_2D, tex);
    glActiveTexture(GL_TEXTURE1);
@@ -270,12 +270,12 @@ update_glyph_map_texture(GLuint tex, GlyphMap gm)
 		GL_TEXTURE_2D,
 		0,
 		GL_RGB,
-		gm.width / 3,
-		gm.height,
+		gm->width / 3,
+		gm->height,
 		0,
 		GL_RGB,
 		GL_UNSIGNED_BYTE,
-		gm.data	
+		gm->data	
 	);
 
    glBindTexture(GL_TEXTURE_2D, 0);
@@ -288,7 +288,7 @@ on_resize(void *_ctx, int width, int height)
 
    RenderSize *rs = ctx->render_size;
    OutputTexture *ot = ctx->output_texture;
-   GlyphMap gm = ctx->glyph_map;
+   GlyphMap *gm = ctx->glyph_map;
    GFX_Shader cs = ctx->compute_shader;
    Cell *cells = ctx->cells;
 
@@ -315,7 +315,7 @@ main(int argc, char **argv)
    init_arena(&cell_arena, MEGA_BYTES(512));
    
    FT_Library freetype = init_freetype();
-   GlyphMap glyph_map = load_glyphmap(&arena, "assets/consolas.ttf", 14, freetype);
+   GlyphMap glyph_map = load_glyphmap(&arena, "assets/consolas.ttf", 18, freetype);
 
    Window window = {};
    init_window(&window, "Ayed");
@@ -331,7 +331,7 @@ main(int argc, char **argv)
    init_render_size(&render_size, compute_shader);
 
    GLuint glyph_map_texture = create_glyph_map_texture(compute_shader);
-   update_glyph_map_texture(glyph_map_texture, glyph_map);
+   update_glyph_map_texture(glyph_map_texture, &glyph_map);
 
    GLuint cells_ssbo;
    glGenBuffers(1, &cells_ssbo);
@@ -343,7 +343,7 @@ main(int argc, char **argv)
    WinEventCtx win_event_ctx = {};
    win_event_ctx.render_size = &render_size;
    win_event_ctx.output_texture = &output_texture;
-   win_event_ctx.glyph_map = glyph_map;
+   win_event_ctx.glyph_map = &glyph_map;
    win_event_ctx.compute_shader = compute_shader;
    win_event_ctx.cells_ssbo = cells_ssbo;
    win_event_ctx.cells = cells;
@@ -362,7 +362,7 @@ main(int argc, char **argv)
    while (!should_close_window(&window)) {
       glClear(GL_COLOR_BUFFER_BIT);
 
-      render_to_cells(cells, &render_size);
+      render_to_cells(&glyph_map, cells, &render_size);
       render_to_texture(compute_shader, output_texture, glyph_map_texture);
       render_to_screen(renderer, output_texture);
 

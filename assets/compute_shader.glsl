@@ -41,7 +41,7 @@ main()
 
    Cell cell = cells[cell_index.x + cell_index.y * grid_size.x];
 
-   uvec2 glyph_pos = uvec2(cell.glyph % 32u, cell.glyph / 32u) * cell_size;
+   uvec2 glyph_pos = uvec2((cell.glyph >> 16) & 0xffffu, cell.glyph & 0xffffu) * cell_size;
 
    uvec2 pixel_pos = glyph_pos + cell_pos;
 
