@@ -39,12 +39,21 @@ struct RenderSize
    GLuint grid_size_loc;
 };
 
+struct Cell
+{
+   U32 glyph;
+   U32 fg;
+   U32 bg;
+};
+
 struct WinEventCtx
 {
    RenderSize *render_size;
    OutputTexture *output_texture;
    GFX_Shader compute_shader;
    GlyphMap glyph_map;
+   GLuint cells_ssbo;
+   Cell *cells;
 };
 
 intern Renderer
@@ -120,11 +129,14 @@ render_to_screen(Renderer r, OutputTexture tex)
 }
 
 intern void
-render_to_texture(GFX_Shader compute_shader, OutputTexture tex)
+render_to_texture(GFX_Shader compute_shader, OutputTexture tex, GLuint glyph_map_texture)
 {
    glUseProgram(compute_shader.id);
 
    glBindImageTexture(0, tex.id, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+
+   glActiveTexture(GL_TEXTURE1);
+   glBindTexture(GL_TEXTURE_2D, glyph_map_texture);
 
    U32 dx = (tex.width + 15) / 16;
    U32 dy = (tex.height + 15) / 16;
@@ -132,6 +144,7 @@ render_to_texture(GFX_Shader compute_shader, OutputTexture tex)
 
    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
+   glBindTexture(GL_TEXTURE_2D, 0);
    glUseProgram(0);
 }
 
@@ -195,11 +208,61 @@ on_resize(void *_ctx, int width, int height)
    OutputTexture *ot = ctx->output_texture;
    GlyphMap gm = ctx->glyph_map;
    GFX_Shader cs = ctx->compute_shader;
+   Cell *cells = ctx->cells;
 
    glViewport(0, 0, width, height);
 
-   resize_output_texture(ot, width, height);
    update_render_size(rs, gm, cs, width, height);
+
+   U32 tex_width = rs->columns * gm.metrics.width;
+   U32 tex_height = rs->rows * gm.metrics.height;
+   resize_output_texture(ot, tex_width, tex_height);
+}
+
+intern GLuint
+create_glyph_map_texture(GFX_Shader s)
+{
+   GLuint tex;
+
+   glUseProgram(s.id);
+   GLuint uniform_slot = glGetUniformLocation(s.id, "glyph_map");
+
+   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+	glGenTextures(1, &tex);
+	glUniform1i(uniform_slot, 1);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, tex);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+   glUseProgram(0);
+   
+   return tex;
+}
+
+intern void
+update_glyph_map_texture(GLuint tex, GlyphMap gm)
+{
+   glBindTexture(GL_TEXTURE_2D, tex);
+   glActiveTexture(GL_TEXTURE1);
+
+	glTexImage2D(
+		GL_TEXTURE_2D,
+		0,
+		GL_RED,
+		gm.width,
+		gm.height,
+		0,
+		GL_RED,
+		GL_UNSIGNED_BYTE,
+		gm.data	
+	);
+
+   glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 int
@@ -207,6 +270,9 @@ main(int argc, char **argv)
 {
    Arena arena = {};
    init_arena(&arena, GIGA_BYTES(1));
+
+   Arena cell_arena = {};
+   init_arena(&cell_arena, MEGA_BYTES(512));
    
    FT_Library freetype = init_freetype();
    GlyphMap glyph_map = load_glyphmap(&arena, "assets/consolas.ttf", freetype);
@@ -224,11 +290,23 @@ main(int argc, char **argv)
    RenderSize render_size = {};
    init_render_size(&render_size, compute_shader);
 
+   GLuint glyph_map_texture = create_glyph_map_texture(compute_shader);
+   update_glyph_map_texture(glyph_map_texture, glyph_map);
+
+   GLuint cells_ssbo;
+   glGenBuffers(1, &cells_ssbo);
+   glBindBuffer(GL_SHADER_STORAGE_BUFFER, cells_ssbo);
+   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, cells_ssbo);
+
+   Cell *cells = push_array(&cell_arena, Cell, cell_arena.size / sizeof(Cell));
+
    WinEventCtx win_event_ctx = {};
    win_event_ctx.render_size = &render_size;
    win_event_ctx.output_texture = &output_texture;
    win_event_ctx.glyph_map = glyph_map;
    win_event_ctx.compute_shader = compute_shader;
+   win_event_ctx.cells_ssbo = cells_ssbo;
+   win_event_ctx.cells = cells;
 
    WindowCallbacks win_callbacks = {};
    win_callbacks.ctx = &win_event_ctx;
@@ -237,18 +315,28 @@ main(int argc, char **argv)
    set_window_callbacks(&window, win_callbacks);
    on_resize(&win_event_ctx, window.width, window.height);
 
+   for (int i = 0; i < render_size.columns * render_size.rows; ++i) {
+      cells[i].glyph = ('A' - ' ') + i;
+      cells[i].bg = 0x00000000;
+      cells[i].fg = 0xFFFFFFFF;
+   }
+
    U64 fps = 0;
    double last_time_fps = glfwGetTime();
 
    while (!should_close_window(&window)) {
       glClear(GL_COLOR_BUFFER_BIT);
 
-      render_to_texture(compute_shader, output_texture);
+      render_to_texture(compute_shader, output_texture, glyph_map_texture);
       render_to_screen(renderer, output_texture);
 
       double now_time_fps = glfwGetTime();
       double delta_time_fps = now_time_fps - last_time_fps;
       if (delta_time_fps >= 1.0) {
+
+         U64 cells_size = render_size.columns * render_size.rows * sizeof(Cell);
+         glBufferData(GL_SHADER_STORAGE_BUFFER, cells_size, cells, GL_DYNAMIC_DRAW);
+
          char buf[128];
 
          double mspf = (delta_time_fps * 1000) / (double)fps;
@@ -263,6 +351,8 @@ main(int argc, char **argv)
 
       update_window(&window);
    }
+
+   glDeleteBuffers(1, &cells_ssbo);
 
    destroy_renderer(renderer);
    unload_shader(compute_shader);

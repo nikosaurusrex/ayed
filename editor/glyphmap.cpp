@@ -7,8 +7,8 @@
 
 enum
 {
-   GM_COUNT_X = 64,
-   GM_COUNT_Y = 64,
+   GM_COUNT_X = 32,
+   GM_COUNT_Y = 16,
 };
 
 intern GlyphMetrics
@@ -99,7 +99,7 @@ load_glyphmap(Arena *arena, const char *font_name, FT_Library freetype)
       U32 t = (U32)t_signed;
 
       U32 tx = i % GM_COUNT_X;
-      U32 ty = i / GM_COUNT_Y;
+      U32 ty = i / GM_COUNT_X;
 
       U32 sx = tx * gm.metrics.width + l;
       U32 sy = ty * gm.metrics.height + t;

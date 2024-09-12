@@ -9,5 +9,6 @@ uniform sampler2D tex_text;
 void
 main()
 {
-   o_color = texture(tex_text, p_uv);
+   vec2 uv = vec2(p_uv.x, 1.0 - p_uv.y);
+   o_color = texture(tex_text, uv);
 }

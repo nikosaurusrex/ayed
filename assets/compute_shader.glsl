@@ -1,21 +1,56 @@
 #version 450 core
 
-layout(local_size_x=16, local_size_y=16) in;
+layout(local_size_x=16, local_size_y=16, local_size_z=1) in;
 layout(rgba32f, binding=0) uniform image2D output_texture;
 
 uniform uvec2 cell_size;
 uniform uvec2 grid_size;
 
+struct Cell
+{
+   uint glyph;
+   uint fg;
+   uint bg;
+};
+
+layout(std430, binding=3) buffer cells_buffer {
+   Cell cells[];
+};
+
+layout(binding=1) uniform sampler2D glyph_map;
+
+vec3 unpack_color(uint c)
+{
+   int r = int((c >> 16u) & 0xffu);
+   int g = int((c >> 8u) & 0xffu);
+   int b = int(c & 0xffu);
+   return vec3(r, g, b) / 255.0;
+}
+
 void
 main()
 {
-   ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
-   pixel.y = imageSize(output_texture).y - 1 - pixel.y;
+   uvec2 pixel = gl_GlobalInvocationID.xy;
 
-   if (pixel.x >= cell_size.x * grid_size.x || pixel.y < 0) {
+   if (pixel.x >= cell_size.x * grid_size.x || pixel.y >= cell_size.y * grid_size.y) {
       return;
    }
 
-   vec4 color = vec4(1.0, 0.0, 0.0, 1.0);
-   imageStore(output_texture, pixel, color);
+   uvec2 cell_index = pixel / cell_size; 
+   uvec2 cell_pos = pixel % cell_size;
+
+   Cell cell = cells[cell_index.x + cell_index.y * grid_size.x];
+
+   uvec2 glyph_pos = uvec2(cell.glyph % 32u, cell.glyph / 32u) * cell_size;
+
+   uvec2 pixel_pos = glyph_pos + cell_pos;
+
+   vec4 texel = texelFetch(glyph_map, ivec2(pixel_pos), 0);
+
+   vec3 fg = unpack_color(cell.fg);
+   vec3 bg = unpack_color(cell.bg);
+
+   vec4 color = vec4(mix(bg, fg, texel.r), 1.0);
+
+   imageStore(output_texture, ivec2(pixel), color);
 }
