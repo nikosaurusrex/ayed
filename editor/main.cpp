@@ -253,11 +253,11 @@ update_glyph_map_texture(GLuint tex, GlyphMap gm)
 	glTexImage2D(
 		GL_TEXTURE_2D,
 		0,
-		GL_RED,
-		gm.width,
+		GL_RGB,
+		gm.width / 3,
 		gm.height,
 		0,
-		GL_RED,
+		GL_RGB,
 		GL_UNSIGNED_BYTE,
 		gm.data	
 	);
@@ -275,7 +275,7 @@ main(int argc, char **argv)
    init_arena(&cell_arena, MEGA_BYTES(512));
    
    FT_Library freetype = init_freetype();
-   GlyphMap glyph_map = load_glyphmap(&arena, "assets/consolas.ttf", freetype);
+   GlyphMap glyph_map = load_glyphmap(&arena, "assets/consolas.ttf", 22, freetype);
 
    Window window = {};
    init_window(&window, "Ayed");

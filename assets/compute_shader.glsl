@@ -50,7 +50,9 @@ main()
    vec3 fg = unpack_color(cell.fg);
    vec3 bg = unpack_color(cell.bg);
 
-   vec4 color = vec4(mix(bg, fg, texel.r), 1.0);
+   vec3 color = mix(bg, fg, texel.rgb);
 
-   imageStore(output_texture, ivec2(pixel), color);
+   vec3 corrected_color = pow(color, vec3(1.0 / 1.8));
+
+   imageStore(output_texture, ivec2(pixel), vec4(corrected_color, 1.0));
 }
