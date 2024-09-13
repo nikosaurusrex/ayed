@@ -7,7 +7,7 @@
 void
 init_arena(Arena *a, U64 size)
 {
-   a->size = 0;
+   a->size = size;
    a->top = 0;
    a->ptr = (U8 *) os_reserve(size);
    

@@ -9,3 +9,5 @@ profile_test
 *.ilk
 compile_flags.txt
 out.jpg
+.vs
+*.rdi

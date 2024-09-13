@@ -5,6 +5,17 @@ enum
    MAX_GAP_SIZE = 64
 };
 
+intern U32
+utf8_len(U8 byte)
+{
+   if ((byte & 0x80) == 0) return 1;
+   if ((byte & 0xE0) == 0xC0) return 2;
+   if ((byte & 0xF0) == 0xE0) return 3;
+   if ((byte & 0xF8) == 0xF0) return 4;
+
+   return 1;
+}
+
 intern void
 move_gap(GapBuffer *buf, U64 pos)
 {
@@ -14,8 +25,8 @@ move_gap(GapBuffer *buf, U64 pos)
 
    if (pos < buf->start) {
       U64 move = buf->start - pos;
-      for (U64 i = move - 1; i >= 0; --i) {
-         buf->ptr[buf->end - move  + i] = buf->ptr[pos + i];
+      for (S64 i = move - 1; i >= 0; --i) {
+         buf->ptr[buf->end - move + i] = buf->ptr[pos + i];
       }
       buf->start -= move;
       buf->end -= move;
@@ -51,7 +62,7 @@ void insert_char(GapBuffer *buf, U8 c, U64 pos)
 
    if (buf->start == buf->end) {
       U64 shift = MAX_GAP_SIZE - (buf->end - buf->start);
-      for (U64 i = buf->cap - i; i >= buf->end + shift; --i) {
+      for (S64 i = buf->cap - i; i >= S64(buf->end + shift); --i) {
          buf->ptr[i] = buf->ptr[i - shift];
       }
       buf->end += shift;
@@ -71,7 +82,7 @@ insert_string(GapBuffer *buf, String8 s, U64 pos)
    while (s.len > 0) {
       if (buf->start == buf->end) {
          U64 shift = MAX_GAP_SIZE - (buf->end - buf->start);
-         for (U64 i = buf->cap - 1; i >= buf->end + shift; --i) {
+         for (S64 i = buf->cap - 1; i >= S64(buf->end + shift); --i) {
             buf->ptr[i] = buf->ptr[i - shift];
          }
          buf->end += shift;
@@ -89,8 +100,9 @@ delete_char(GapBuffer *buf, U64 pos)
    
    move_gap(buf, pos);
 
-   buf->end++;
-   buf->len--;
+   U32 cl = utf8_len(buf->ptr[buf->end]);
+   buf->end += cl;
+   buf->len -= cl;
 }
 
 void
@@ -101,8 +113,9 @@ delete_chars(GapBuffer *buf, U64 pos, U64 n)
    move_gap(buf, pos);
 
    while (n > 0 && buf->end < buf->cap) {
-      buf->end++;
-      buf->len--;
+      U32 cl = utf8_len(buf->ptr[buf->end]);
+      buf->end += cl;
+      buf->len -= cl;
       n--;
    }
 }
@@ -114,13 +127,13 @@ str8_from_gap_buffer(GapBuffer *buf, Arena *a)
    s.ptr = push_array(a, U8, buf->len);
    s.len = buf->len;
 
-   for (U64 i = 0; i < buf->start; ++i) {
+   for (U64 i = 0; i < MIN(buf->start, buf->len); ++i) {
       s[i] = (*buf)[i];
    }
 
    U64 gap_size = buf->end - buf->start;
    for (U64 i = buf->end; i < buf->len + gap_size; ++i) {
-      s[i - gap_size] = (*buf)[i];
+      s[i - gap_size] = buf->ptr[i];
    }
 
    return s;

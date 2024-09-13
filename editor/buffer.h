@@ -21,7 +21,7 @@ struct GapBuffer
    }
 
    U8 &operator[](U64 index) {
-      ASSERT(index < len);
+      ASSERT(index < len + (end - start));
 
       if (index < start) {
          return ptr[index];
