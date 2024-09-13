@@ -93,7 +93,7 @@ create_renderer(Arena *arena)
 
    glBindVertexArray(0);
 
-   r.shader = load_gfx_shaders(str8_from_cstr("assets/vert_shader.glsl"), str8_from_cstr("assets/frag_shader.glsl"), arena);
+   r.shader = load_gfx_shaders(String8("assets/vert_shader.glsl"), String8("assets/frag_shader.glsl"), arena);
 
    glUseProgram(r.shader.id);
    glUniform1i(glGetUniformLocation(r.shader.id, "tex_text"), 0);
@@ -305,6 +305,12 @@ on_key_event(void *_ctx, int key, int scancode, int action, int mods)
    WinEventCtx *ctx = (WinEventCtx *) _ctx;
 }
 
+intern void
+on_char_event(void *_ctx, unsigned int codepoint)
+{
+   WinEventCtx *ctx = (WinEventCtx *) _ctx;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -322,7 +328,7 @@ main(int argc, char **argv)
 
    init_gfx();
 
-   GFX_Shader compute_shader = load_compute_shader(str8_from_cstr("assets/compute_shader.glsl"), &arena);
+   GFX_Shader compute_shader = load_compute_shader(String8("assets/compute_shader.glsl"), &arena);
    Renderer renderer = create_renderer(&arena);
 
    OutputTexture output_texture = create_output_texture();

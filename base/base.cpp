@@ -18,6 +18,19 @@ log_fatal(const char *fmt, ...)
 }
 
 void
+log_error(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+
+    fprintf(stderr, "[Error] ");
+
+    vfprintf(stderr, fmt, args);
+    putc('\n', stderr);
+    va_end(args);
+}
+
+void
 log_dev(const char *fmt, ...)
 {
     va_list args;

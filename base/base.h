@@ -151,5 +151,6 @@ read_only global S16 min_S16 = (S16)0xffff;
 read_only global S8  min_S8  = (S8)0xff;
 
 static void log_fatal(const char *fmt, ...);
+static void log_error(const char *fmt, ...);
 static void log_dev(const char *fmt, ...);
 static void log_info(const char *fmt, ...);

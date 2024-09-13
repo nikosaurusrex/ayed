@@ -21,6 +21,14 @@ free_arena(Arena *a, U64 size)
    os_release(a->ptr, size);
 }
 
+void
+sub_arena(Arena *sub, Arena *a, U64 size)
+{
+   sub->size = size;
+   sub->ptr = push_size(a, size);
+   sub->top = 0;
+}
+
 TempArena
 begin_temp_arena(Arena *a)
 {
@@ -33,12 +41,12 @@ begin_temp_arena(Arena *a)
 }
 
 void
-end_temp_arena(TempArena *ta)
+end_temp_arena(TempArena ta)
 {
-   ta->arena->top = ta->reset_top;
+   ta.arena->top = ta.reset_top;
 }
 
-void *
+U8 *
 push_size(Arena *a, U64 size, U64 align)
 {
    U64 base = (U64) (a->ptr + a->top);
