@@ -15,6 +15,7 @@ test_gap_buffer()
 
    GapBuffer gb = gap_buffer_from_arena(arena);
 
+   // Test 1: Insert
    String8 s1("Hello");
    insert_string(&gb, s1, 0);
    TEST_CHECK(gb.len == s1.len);

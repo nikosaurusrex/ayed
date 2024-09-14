@@ -71,7 +71,7 @@ os_close_file(OS_Handle handle)
 OS_FileInfo
 os_file_info(OS_Handle handle)
 {
-   OS_FileInfo file_info = {0};
+   OS_FileInfo file_info = {};
    struct stat statbuf;
    fstat((int)handle, &statbuf);
    file_info.size = statbuf.st_size;

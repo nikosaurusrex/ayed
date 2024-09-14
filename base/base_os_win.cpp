@@ -32,7 +32,7 @@ os_release(void *ptr, U64 size)
 U64
 os_page_size(void)
 {
-   SYSTEM_INFO sys_info = {0};
+   SYSTEM_INFO sys_info = {};
    GetSystemInfo(&sys_info);
 
    return sys_info.dwPageSize;
@@ -78,7 +78,7 @@ os_close_file(OS_Handle handle)
 OS_FileInfo
 os_file_info(OS_Handle handle)
 {
-   OS_FileInfo file_info = {0};
+   OS_FileInfo file_info = {};
 
    U32 high_bits = 0;
    U32 low_bits  = GetFileSize((HANDLE)handle, (DWORD *)&high_bits);
@@ -97,9 +97,9 @@ os_file_is_valid(OS_Handle handle)
 String8
 os_read(OS_Handle handle, U64 size, Arena *arena)
 {
-   String8 result = {0};
+   String8 result = {};
 
-   LARGE_INTEGER li = {0};
+   LARGE_INTEGER li = {};
    li.QuadPart     = 0;
 
    if (SetFilePointerEx((HANDLE)handle, li, 0, FILE_BEGIN)) {
