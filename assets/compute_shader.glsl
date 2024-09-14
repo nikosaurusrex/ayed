@@ -6,6 +6,8 @@ layout(rgba32f, binding=0) uniform image2D output_texture;
 uniform uvec2 cell_size;
 uniform uvec2 grid_size;
 
+const uint GLYPH_INVERT = 0x1;
+
 struct Cell
 {
    uint glyph;
@@ -49,6 +51,12 @@ main()
 
    vec3 fg = unpack_color(cell.fg);
    vec3 bg = unpack_color(cell.bg);
+
+   uint flags = (cell.bg >> 24u) & 0xffu;
+   vec3 invert = vec3(flags & GLYPH_INVERT);
+
+   fg = abs(invert - fg);
+   bg = abs(invert - bg);
 
    vec3 color = mix(bg, fg, texel.rgb);
 

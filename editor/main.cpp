@@ -9,11 +9,13 @@
 #include "window.h"
 #include "gfx.h"
 #include "glyphmap.h"
+#include "buffer.h"
 
 #include "base/base_inc.cpp"
 #include "window.cpp"
 #include "gfx.cpp"
 #include "glyphmap.cpp"
+#include "buffer.cpp"
 
 struct Renderer
 {
@@ -32,7 +34,7 @@ struct OutputTexture
 
 struct RenderSize
 {
-   U32 columns;
+   U32 cols;
    U32 rows;
 
    GLuint cell_size_loc;
@@ -54,6 +56,25 @@ struct WinEventCtx
    GlyphMap *glyph_map;
    GLuint cells_ssbo;
    Cell *cells;
+};
+
+struct Pane
+{
+   GapBuffer buffer;
+   U64 cursor;
+   U32 scroll_offset;
+   U32 cols;
+   U32 rows;
+};
+
+enum
+{
+   GLYPH_INVERT = 0x1
+};
+
+enum
+{
+   TAB_SIZE = 3
 };
 
 intern Renderer
@@ -113,32 +134,54 @@ destroy_renderer(Renderer r)
 }
 
 intern void
-render_to_cells(GlyphMap *gm, Cell *cells, RenderSize *rs)
+render_pane(GlyphMap *gm, Cell *cells, Pane *pane)
 {
-   const char *text = "int main() {\n\treturn 0;\n}";
+   GapBuffer buf = pane->buffer;
 
-   U64 cells_size = rs->columns * rs->rows * sizeof(Cell);
+   U64 pos = pane->scroll_offset;
 
-   MEM_SET(cells, 0, cells_size);
+   U32 cell_index = 0;
+   U32 col = 0;
+   for (U32 row = 0; row < pane->rows && pos < buf.len; ++row) {
+      col = 0;
 
-   U32 cx = 0, cy = 0; // cell coordinates
+      while (col < pane->cols && pos < buf.len) {
+         U8 codepoint = buf[pos];
 
-   for (U32 i = 0; i < strlen(text); ++i) {
-      U8 codepoint = text[i];
-      U32 glyph = load_glyph(gm, codepoint);
-      if (codepoint == '\t') {
-         cx += 4;
-      } else if (codepoint == '\n') {
-         cx = 0;
-         cy++;
-      } else {
-         U32 ci = cx + cy * rs->columns;
-         cells[ci].glyph = glyph;
-         cells[ci].bg = 0x00000000;
-         cells[ci].fg = 0xFFFFFFFF;
-         cx++;
+         if (codepoint == '\n') {
+            pos++;
+            cell_index += pane->cols - col;
+            break;
+         } else if (codepoint == '\t') {
+            U32 spaces = TAB_SIZE - (col % TAB_SIZE);
+            cell_index += spaces;
+            col += spaces;
+            pos++;
+         } else {
+            U32 glyph = load_glyph(gm, codepoint);
+            cells[cell_index].glyph = glyph;
+            cells[cell_index].fg = 0x00FFFFFF;
+            cells[cell_index].bg = 0x00000000;
+
+            if (pos == pane->cursor) {
+               cells[cell_index].bg |= GLYPH_INVERT << 24;
+            }
+
+            cell_index++;
+            col++;
+            pos++;
+         }
       }
    }
+}
+
+intern void
+render_to_cells(GlyphMap *gm, Cell *cells, RenderSize *rs, Pane *pane)
+{
+   U64 cells_size = rs->cols * rs->rows * sizeof(Cell);
+   MEM_SET(cells, 0, cells_size);
+
+   render_pane(gm, cells, pane);
 
    glBufferData(GL_SHADER_STORAGE_BUFFER, cells_size, cells, GL_DYNAMIC_DRAW);
 }
@@ -199,7 +242,7 @@ update_render_size(RenderSize *rs, GlyphMap *gm, GFX_Shader s, U32 window_width,
    U32 cols = window_width / m.width;
    U32 rows = window_height / m.height;
 
-   rs->columns = cols;
+   rs->cols = cols;
    rs->rows = rows;
 
    glUniform2ui(rs->cell_size_loc, m.width, m.height);
@@ -315,10 +358,16 @@ int
 main(int argc, char **argv)
 {
    Arena arena = {};
-   init_arena(&arena, GIGA_BYTES(1));
+   init_arena(&arena, GIGA_BYTES(2));
 
    Arena cell_arena = {};
-   init_arena(&cell_arena, MEGA_BYTES(512));
+   sub_arena(&cell_arena, &arena, MEGA_BYTES(512));
+
+   Arena buffer_arena = {};
+   sub_arena(&buffer_arena, &arena, MEGA_BYTES(512));
+
+   GapBuffer buf = gap_buffer_from_arena(buffer_arena);
+   insert_string(&buf, String8("int main() {\n\treturn 0;\n}"), 0);
    
    FT_Library freetype = init_freetype();
    GlyphMap glyph_map = load_glyphmap(&arena, "assets/consolas.ttf", 18, freetype);
@@ -362,13 +411,19 @@ main(int argc, char **argv)
    set_window_callbacks(&window, win_callbacks);
    on_resize(&win_event_ctx, window.width, window.height);
 
+   Pane pane = {};
+   pane.buffer = buf;
+   pane.rows = render_size.rows;
+   pane.cols = render_size.cols;
+
    U64 fps = 0;
    double last_time_fps = glfwGetTime();
 
    while (!should_close_window(&window)) {
       glClear(GL_COLOR_BUFFER_BIT);
 
-      render_to_cells(&glyph_map, cells, &render_size);
+      render_to_cells(&glyph_map, cells, &render_size, &pane);
+
       render_to_texture(compute_shader, output_texture, glyph_map_texture);
       render_to_screen(renderer, output_texture);
 
