@@ -2,13 +2,13 @@
 
 enum
 {
-   MAX_GAP_SIZE = 64
+   MAX_GAP_SIZE = 16
 };
 
 intern U32
 utf8_len(U8 byte)
 {
-   if ((byte & 0x80) == 0) return 1;
+   if_likely ((byte & 0x80) == 0) return 1;
    if ((byte & 0xE0) == 0xC0) return 2;
    if ((byte & 0xF0) == 0xE0) return 3;
    if ((byte & 0xF8) == 0xF0) return 4;
@@ -23,18 +23,20 @@ move_gap(GapBuffer *buf, U64 pos)
       return;
    }
 
+   if (buf->start == buf->end) {
+      buf->start = pos;
+      buf->end = pos;
+      return;
+   }
+
    if (pos < buf->start) {
       U64 move = buf->start - pos;
-      for (S64 i = move - 1; i >= 0; --i) {
-         buf->ptr[buf->end - move + i] = buf->ptr[pos + i];
-      }
+      MEM_MOVE(buf->ptr + buf->end - move, buf->ptr + pos, move);
       buf->start -= move;
       buf->end -= move;
    } else {
       U64 move = pos - buf->start;
-      for (U64 i = 0; i < move; ++i) {
-         buf->ptr[buf->start + i] = buf->ptr[buf->end + i];
-      }
+      MEM_MOVE(buf->ptr + buf->start, buf->ptr + buf->end, move);
       buf->start += move;
       buf->end += move;
    }
@@ -61,10 +63,8 @@ void insert_char(GapBuffer *buf, U8 c, U64 pos)
    move_gap(buf, pos);
 
    if (buf->start == buf->end) {
-      U64 shift = MAX_GAP_SIZE - (buf->end - buf->start);
-      for (S64 i = buf->cap - i; i >= S64(buf->end + shift); --i) {
-         buf->ptr[i] = buf->ptr[i - shift];
-      }
+      U64 shift = MAX_GAP_SIZE;
+      MEM_MOVE(buf->ptr + buf->end + shift, buf->ptr + buf->end, buf->len - buf->end);
       buf->end += shift;
    }
    buf->ptr[buf->start++] = c;
@@ -78,18 +78,23 @@ insert_string(GapBuffer *buf, String8 s, U64 pos)
 
    move_gap(buf, pos);
 
-   U64 sidx = 0;
    while (s.len > 0) {
-      if (buf->start == buf->end) {
-         U64 shift = MAX_GAP_SIZE - (buf->end - buf->start);
-         for (S64 i = buf->cap - 1; i >= S64(buf->end + shift); --i) {
-            buf->ptr[i] = buf->ptr[i - shift];
-         }
+      U64 gap_size = buf->end - buf->start;
+      if (gap_size == 0) {
+         U64 shift = MAX_GAP_SIZE;
+         MEM_MOVE(buf->ptr + buf->end + shift, buf->ptr + buf->end, buf->len - buf->end);
          buf->end += shift;
+         gap_size = shift;
       }
-      buf->ptr[buf->start++] = s.ptr[sidx++];
-      s.len--;
-      buf->len++;
+
+      U64 copy_len = MIN(s.len, gap_size);
+      MEM_COPY(buf->ptr + buf->start, s.ptr, copy_len);
+
+      s.ptr += copy_len;
+      s.len -= copy_len;
+
+      buf->start += copy_len;
+      buf->len += copy_len;
    }
 }
 
@@ -128,7 +133,7 @@ str8_from_gap_buffer(GapBuffer *buf, Arena *a)
    s.len = buf->len;
 
    for (U64 i = 0; i < MIN(buf->start, buf->len); ++i) {
-      s[i] = (*buf)[i];
+      s[i] = buf->ptr[i];
    }
 
    U64 gap_size = buf->end - buf->start;

@@ -58,7 +58,8 @@ typedef int32_t  B32;
 #define CLAMP_BOT(X, B) MAX(X, B)
 #define CLAMP(A, X, B)  (((X) < (A)) ? (A) : ((X) > (B)) ? (B) : (X))
 
-#define MEM_COPY(dst, src, size) memmove((dst), (src), (size))
+#define MEM_COPY(dst, src, size) memcpy((dst), (src), (size))
+#define MEM_MOVE(dst, src, size) memmove((dst), (src), (size))
 #define MEM_SET(dst, byte, size) memset((dst), (byte), (size))
 #define MEM_CMP(a, b, size)      memcmp((a), (b), (size))
 #define MEM_ZERO(s, z)           memset((s), 0, (z))
