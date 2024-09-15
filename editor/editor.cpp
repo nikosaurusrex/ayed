@@ -9,13 +9,14 @@
 #include "window.h"
 #include "gfx.h"
 #include "glyphmap.h"
-#include "buffer.h"
+#include "editor.h"
 
 #include "base/base_inc.cpp"
 #include "window.cpp"
 #include "gfx.cpp"
 #include "glyphmap.cpp"
 #include "buffer.cpp"
+#include "keymaps.cpp"
 
 struct Renderer
 {
@@ -56,15 +57,8 @@ struct WinEventCtx
    GlyphMap *glyph_map;
    GLuint cells_ssbo;
    Cell *cells;
-};
-
-struct Pane
-{
-   GapBuffer buffer;
-   U64 cursor;
-   U32 scroll_offset;
-   U32 cols;
-   U32 rows;
+   Editor *editor;
+   Window *window;
 };
 
 enum
@@ -176,10 +170,12 @@ render_pane(GlyphMap *gm, Cell *cells, Pane *pane)
 }
 
 intern void
-render_to_cells(GlyphMap *gm, Cell *cells, RenderSize *rs, Pane *pane)
+render_to_cells(GlyphMap *gm, Cell *cells, RenderSize *rs, Editor *ed)
 {
    U64 cells_size = rs->cols * rs->rows * sizeof(Cell);
    MEM_SET(cells, 0, cells_size);
+
+   Pane *pane = &ed->pane;
 
    render_pane(gm, cells, pane);
 
@@ -325,6 +321,18 @@ update_glyph_map_texture(GLuint tex, GlyphMap *gm)
 }
 
 intern void
+dispatch_key_event(Editor *ed)
+{
+   InputEvent event  = ed->last_input_event;
+   Keymap    *keymap = ed->keymaps[ed->mode];
+
+   if (event.type == INPUT_EVENT_PRESSED) {
+      Shortcut *shortcut = keymap_get_shortcut(keymap, event.key_comb);
+      shortcut->function(ed);
+   }
+}
+
+intern void
 on_resize(void *_ctx, int width, int height)
 {
    WinEventCtx *ctx = (WinEventCtx *) _ctx;
@@ -334,24 +342,103 @@ on_resize(void *_ctx, int width, int height)
    GlyphMap *gm = ctx->glyph_map;
    GFX_Shader cs = ctx->compute_shader;
    Cell *cells = ctx->cells;
+   Pane *p = &ctx->editor->pane;
 
    glViewport(0, 0, width, height);
 
    update_render_size(rs, gm, cs, width, height);
 
    resize_output_texture(ot, width, height);
+
+   p->cols = rs->cols;
+   p->rows = rs->rows;
 }
 
 intern void
 on_key_event(void *_ctx, int key, int scancode, int action, int mods)
 {
    WinEventCtx *ctx = (WinEventCtx *) _ctx;
+   Editor *ed = ctx->editor;
+
+   if (action == GLFW_RELEASE) {
+      return;
+   }
+
+   if (!(mods & GLFW_MOD_CONTROL) || key >= GLFW_KEY_LEFT_BRACKET) {
+      if (GLFW_KEY_SPACE <= key && key <= GLFW_KEY_GRAVE_ACCENT) {
+         return;
+      }
+   }
+
+   switch (key) {
+   case GLFW_KEY_LEFT_CONTROL:
+   case GLFW_KEY_RIGHT_CONTROL:
+   case GLFW_KEY_LEFT_ALT:
+   case GLFW_KEY_RIGHT_ALT:
+   case GLFW_KEY_LEFT_SHIFT:
+   case GLFW_KEY_RIGHT_SHIFT:
+      return;
+   default:
+      break;
+   }
+
+   U16 kcomb = key;
+   if (mods & GLFW_MOD_CONTROL) {
+      kcomb |= CTRL;
+   }
+   if (mods & GLFW_MOD_SHIFT) {
+      kcomb |= SHIFT;
+   }
+   if (mods & GLFW_MOD_ALT) {
+      kcomb |= ALT;
+   }
+
+   InputEvent input_event;
+   input_event.type     = INPUT_EVENT_PRESSED;
+   input_event.key_comb = kcomb;
+   input_event.ch       = (U8)key;
+
+   ed->last_input_event = input_event;
+
+   dispatch_key_event(ed);
 }
 
 intern void
 on_char_event(void *_ctx, unsigned int codepoint)
 {
    WinEventCtx *ctx = (WinEventCtx *) _ctx;
+   Editor *ed = ctx->editor;
+   Window *win = ctx->window;
+
+   U32 kcomb = codepoint;
+   if ('a' <= kcomb && kcomb <= 'z') {
+      kcomb -= 32;
+   }
+
+   if (glfwGetKey(win->handle, GLFW_KEY_LEFT_SHIFT)) {
+      kcomb |= SHIFT;
+   }
+
+   if (glfwGetKey(win->handle, GLFW_KEY_LEFT_CONTROL)) {
+      kcomb |= CTRL;
+   }
+
+   if (glfwGetKey(win->handle, GLFW_KEY_LEFT_ALT)) {
+      kcomb |= ALT;
+   }
+
+   InputEvent input_event;
+   input_event.type     = INPUT_EVENT_PRESSED;
+   input_event.key_comb = kcomb;
+   input_event.ch       = (char)codepoint;
+
+   ed->last_input_event = input_event;
+
+   dispatch_key_event(ed);
+}
+
+void
+ed_on_text_change(Editor *ed) {
 }
 
 int
@@ -366,8 +453,20 @@ main(int argc, char **argv)
    Arena buffer_arena = {};
    sub_arena(&buffer_arena, &arena, MEGA_BYTES(512));
 
+   Arena general_arena = {};
+   sub_arena(&general_arena, &arena, MEGA_BYTES(512));
+
    GapBuffer buf = gap_buffer_from_arena(buffer_arena);
    insert_string(&buf, String8("int main() {\n\treturn 0;\n}"), 0);
+
+   Pane pane = {};
+   pane.buffer = buf;
+
+   Editor editor = {};
+   editor.mode = ED_NORMAL;
+   editor.pane = pane;
+
+   create_default_keymaps(&editor, &general_arena);
    
    FT_Library freetype = init_freetype();
    GlyphMap glyph_map = load_glyphmap(&arena, "assets/consolas.ttf", 18, freetype);
@@ -402,6 +501,8 @@ main(int argc, char **argv)
    win_event_ctx.compute_shader = compute_shader;
    win_event_ctx.cells_ssbo = cells_ssbo;
    win_event_ctx.cells = cells;
+   win_event_ctx.editor = &editor;
+   win_event_ctx.window = &window;
 
    WindowCallbacks win_callbacks = {};
    win_callbacks.ctx = &win_event_ctx;
@@ -411,18 +512,13 @@ main(int argc, char **argv)
    set_window_callbacks(&window, win_callbacks);
    on_resize(&win_event_ctx, window.width, window.height);
 
-   Pane pane = {};
-   pane.buffer = buf;
-   pane.rows = render_size.rows;
-   pane.cols = render_size.cols;
-
    U64 fps = 0;
    double last_time_fps = glfwGetTime();
 
    while (!should_close_window(&window)) {
       glClear(GL_COLOR_BUFFER_BIT);
 
-      render_to_cells(&glyph_map, cells, &render_size, &pane);
+      render_to_cells(&glyph_map, cells, &render_size, &editor);
 
       render_to_texture(compute_shader, output_texture, glyph_map_texture);
       render_to_screen(renderer, output_texture);
