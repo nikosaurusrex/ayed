@@ -38,7 +38,7 @@ window_on_char_event(GLFWwindow *handle, unsigned int codepoint)
    ASSERT(window);
 
    WindowCallbacks callbacks = window->callbacks;
-   WindowCharCallbackFn callback = callbacks.chr;
+   WindowCharCallbackFn callback = callbacks.text;
 
    if (callback != 0) {
       callback(callbacks.ctx, codepoint);

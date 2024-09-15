@@ -59,7 +59,7 @@ intern String8 str8_from_gap_buffer(GapBuffer *buf, Arena *a);
 
 intern U64 line_length(GapBuffer *buf, U64 crs);
 
-// they not only move the cursor but also reset col_store
+// they not only move the cursor but also reset cursor_store
 intern NKINLINE void pane_cursor_back(Pane *p);
 intern NKINLINE void pane_cursor_next(Pane *p);
 intern NKINLINE void pane_set_cursor(Pane *p, U64 crs);

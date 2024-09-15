@@ -66,11 +66,6 @@ enum
    GLYPH_INVERT = 0x1
 };
 
-enum
-{
-   TAB_SIZE = 3
-};
-
 intern Renderer
 create_renderer(Arena *arena)
 {
@@ -135,18 +130,29 @@ render_pane(GlyphMap *gm, Cell *cells, Pane *pane)
    U64 pos = pane->scroll_offset;
 
    U32 cell_index = 0;
+   U32 row = 0;
    U32 col = 0;
-   for (U32 row = 0; row < pane->rows && pos < buf.len; ++row) {
+   for (row = 0; row < pane->rows && pos < buf.len; ++row) {
       col = 0;
 
       while (col < pane->cols && pos < buf.len) {
          U8 codepoint = buf[pos];
 
          if (codepoint == '\n') {
+            if (pos == pane->cursor) {
+               cells[cell_index].bg |= GLYPH_INVERT << 24;
+            }
+
             pos++;
             cell_index += pane->cols - col;
             break;
          } else if (codepoint == '\t') {
+            if (pos == pane->cursor) {
+               for (U32 i = 0; i < TAB_SIZE; ++i) {
+                  cells[cell_index + i].bg |= GLYPH_INVERT << 24;
+               }
+            }
+
             U32 spaces = TAB_SIZE - (col % TAB_SIZE);
             cell_index += spaces;
             col += spaces;
@@ -166,6 +172,10 @@ render_pane(GlyphMap *gm, Cell *cells, Pane *pane)
             pos++;
          }
       }
+   }
+
+   if (pos == pane->cursor && col < pane->cols && row < pane->rows) {
+      cells[cell_index].bg |= GLYPH_INVERT << 24;
    }
 }
 
@@ -264,7 +274,6 @@ resize_output_texture(OutputTexture *ot, U32 width, U32 height)
    ot->height = height;
 
    glBindTexture(GL_TEXTURE_2D, ot->id);
-   // glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA32F, width, height);
    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, 0);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -457,7 +466,7 @@ main(int argc, char **argv)
    sub_arena(&general_arena, &arena, MEGA_BYTES(512));
 
    GapBuffer buf = gap_buffer_from_arena(buffer_arena);
-   insert_string(&buf, String8("int main() {\n\treturn 0;\n}"), 0);
+   // insert_string(&buf, String8("int main() {\n\treturn 0;\n}"), 0);
 
    Pane pane = {};
    pane.buffer = buf;
@@ -508,6 +517,7 @@ main(int argc, char **argv)
    win_callbacks.ctx = &win_event_ctx;
    win_callbacks.resize = on_resize;
    win_callbacks.key = on_key_event;
+   win_callbacks.text = on_char_event;
 
    set_window_callbacks(&window, win_callbacks);
    on_resize(&win_event_ctx, window.width, window.height);

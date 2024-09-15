@@ -34,4 +34,9 @@ struct Editor
    Pane pane;
 };
 
+enum
+{
+   TAB_SIZE = 3
+};
+
 intern void ed_on_text_change(Editor *ed);

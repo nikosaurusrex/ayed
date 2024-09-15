@@ -33,7 +33,7 @@ SHORTCUT(insert_char)
    GapBuffer *buf = &p->buffer;
 
    U8 ch       = input_event.ch;
-   p->cursor = insert_char(&p->buffer, p->cursor, ch);
+   p->cursor = insert_char(&p->buffer, ch, p->cursor);
    ed_on_text_change(ed);
 
    if (ch == '}') {
@@ -104,7 +104,7 @@ SHORTCUT(delete_forwards)
    Pane *p = &ed->pane;
    GapBuffer *buf = &p->buffer;
 
-   // pane_set_cursor(p, buf_delete_forward(buf, p->cursor));
+   pane_set_cursor(p, delete_char(buf, p->cursor));
    ed_on_text_change(ed);
 }
 
@@ -113,7 +113,11 @@ SHORTCUT(delete_backwards)
    Pane *p = &ed->pane;
    GapBuffer *buf = &p->buffer;
 
-   // pane_set_cursor(p, delete_back(buf, p->cursor));
+   if (p->cursor == 0) {
+      return;
+   }
+
+   pane_set_cursor(p, delete_char(buf, p->cursor - 1));
    ed_on_text_change(ed);
 }
 

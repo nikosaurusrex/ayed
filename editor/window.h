@@ -10,7 +10,7 @@ struct WindowCallbacks
 {
    void *ctx;
    WindowKeyCallbackFn key;
-   WindowCharCallbackFn chr;
+   WindowCharCallbackFn text;
    WindowResizeCallbackFn resize;
 };
 

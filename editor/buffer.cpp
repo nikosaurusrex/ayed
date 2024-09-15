@@ -82,7 +82,11 @@ gap_buffer_from_arena(Arena a)
 
 U64 insert_char(GapBuffer *buf, U8 c, U64 pos)
 {
-   ASSERT(pos <= buf->len && buf->len < buf->cap - MAX_GAP_SIZE);
+   ASSERT(buf->len < buf->cap - MAX_GAP_SIZE);
+
+   if (pos > buf->len) {
+      return pos;
+   }
 
    move_gap(buf, pos);
 
@@ -100,7 +104,11 @@ U64 insert_char(GapBuffer *buf, U8 c, U64 pos)
 U64
 insert_string(GapBuffer *buf, String8 s, U64 pos)
 {
-   ASSERT(pos <= buf->len && buf->len + s.len < buf->cap - MAX_GAP_SIZE);
+   ASSERT(buf->len + s.len < buf->cap - MAX_GAP_SIZE);
+
+   if (pos > buf->len) {
+      return pos;
+   }
 
    move_gap(buf, pos);
 
@@ -129,14 +137,46 @@ insert_string(GapBuffer *buf, String8 s, U64 pos)
 U64
 insert_line(GapBuffer *buf, U64 pos, B32 auto_indent)
 {
-   // TODO:
+   if (pos > buf->len) {
+      return pos;
+   }
+
+   if (auto_indent) {
+      U64 indent = line_indent(buf, pos);
+
+      U64 lcc = cursor_back(buf, pos);
+      while (lcc > 0 && is_whitespace((*buf)[lcc])) {
+         lcc = cursor_back(buf, lcc);
+      }
+
+      U8 last_char = (*buf)[lcc];
+
+      if (last_char == '{') {
+         indent += TAB_SIZE;
+      }
+
+      pos = insert_char(buf, '\n', pos);
+
+      for (U64 i = 0; i < indent / TAB_SIZE; ++i) {
+         pos = insert_char(buf, '\t', pos);
+      }
+
+      for (U64 i = 0; i < indent % TAB_SIZE; ++i) {
+         pos = insert_char(buf, ' ', pos);
+      }
+   } else {
+      pos = insert_char(buf, '\n', pos);
+   }
+
    return pos;
 }
 
 U64
 delete_char(GapBuffer *buf, U64 pos)
 {
-   ASSERT(pos < buf->len);
+   if (pos >= buf->len) {
+      return pos;
+   }
    
    move_gap(buf, pos);
 
@@ -157,7 +197,9 @@ delete_char_back(GapBuffer *buf, U64 pos)
 U64
 delete_chars(GapBuffer *buf, U64 pos, U64 n)
 {
-   ASSERT(pos + n < buf->len);
+   if (pos + n >= buf->len) {
+      return pos;
+   }
 
    move_gap(buf, pos);
 
