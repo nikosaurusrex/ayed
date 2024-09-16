@@ -1,5 +1,7 @@
 #include "buffer.h"
 
+#include "editor.h"
+
 enum
 {
    MAX_GAP_SIZE = 16
@@ -407,7 +409,7 @@ cursor_line_end(GapBuffer *buf, U64 crs)
    while (crs < buf->len) {
       U8 ch = (*buf)[crs];
       if (ch == '\n') {
-         return crs;
+         return crs - 1;
       }
 
       crs = cursor_next(buf, crs);
