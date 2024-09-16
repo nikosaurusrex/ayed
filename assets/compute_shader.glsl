@@ -7,6 +7,7 @@ uniform uvec2 cell_size;
 uniform uvec2 grid_size;
 
 const uint GLYPH_INVERT = 0x1;
+const uint GLYPH_BLINK = 0x2;
 
 struct Cell
 {

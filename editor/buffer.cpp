@@ -80,6 +80,26 @@ gap_buffer_from_arena(Arena a)
    return buf;
 }
 
+void
+load_source_file(GapBuffer *buf, String8 path, Arena *a)
+{
+   TempArena temp = begin_temp_arena(a);
+
+   String8 content = os_read_file(path, temp.arena);
+   if (!content.ptr) {
+      log_error("File '%.*s' does not exist\n", (int)path.len, path.ptr);
+      end_temp_arena(temp);
+      return;
+   }
+
+   MEM_COPY(buf->ptr, content.ptr, content.len);
+   buf->len = content.len;
+   buf->start = content.len;
+   buf->end = buf->start + MAX_GAP_SIZE;
+
+   end_temp_arena(temp);
+}
+
 U64 insert_char(GapBuffer *buf, U8 c, U64 pos)
 {
    ASSERT(buf->len < buf->cap - MAX_GAP_SIZE);
@@ -238,17 +258,37 @@ line_length(GapBuffer *buf, U64 crs)
    return cursor_line_end(buf, crs) - cursor_line_begin(buf, crs);
 }
 
+Pane
+create_pane(U64 cap, U32 cols, U32 rows)
+{
+   Pane p = {};
+   p.rows = rows;
+   p.cols = cols;
+   
+   init_arena(&p.arena, cap);
+
+   p.buffer = gap_buffer_from_arena(p.arena);
+
+   return p;
+}
+
+void
+destroy_pane(Pane p)
+{
+   free_arena(&p.arena, p.arena.size);
+}
+
 void
 pane_cursor_back(Pane *p)
 {
-   p->cursor = cursor_back(&p->buffer, p->cursor);
+   p->cursor = cursor_back_normal(&p->buffer, p->cursor);
    pane_reset_col_store(p);
 }
 
 void
 pane_cursor_next(Pane *p)
 {
-   p->cursor = cursor_next(&p->buffer, p->cursor);
+   p->cursor = cursor_next_normal(&p->buffer, p->cursor);
    pane_reset_col_store(p);
 }
 
@@ -257,6 +297,8 @@ pane_set_cursor(Pane *p, U64 crs)
 {
    p->cursor = crs;
    pane_reset_col_store(p);
+
+   update_scroll(p);
 }
 
 void
@@ -265,45 +307,38 @@ pane_reset_col_store(Pane *p)
    p->cursor_store = -1;
 }
 
-/*
 void
-pane_update_scrolling(Pane *p, U64Offsets coff, float font_height)
+update_scroll(Pane *pane)
 {
-    uint visible_lines = (uint)ceilf(p->h / font_height) - 1;
+   U32 cursor_line = 0;
+   U64 cursor_col = 0;
 
-    if (coff.line < p->sy) {
-        p->sy -= p->sy - coff.line;
+   for (U64 i = 0; i < pane->cursor; ++i) {
+      if (pane->buffer[i] == '\n') {
+         cursor_line++;
+         cursor_col = 0;
+      } else {
+         cursor_col++;
+      }
+   }
 
-        CLAMP_BOT(p->sy, 0);
-    } else if (coff.ry >= visible_lines) {
-        p->sy += (coff.ry - visible_lines + 1);
-    }
+   if (cursor_line < pane->scroll_offset) {
+      pane->scroll_offset = cursor_line;
+   } else if (cursor_line >= pane->scroll_offset + pane->rows) {
+      pane->scroll_offset = cursor_line - pane->rows + 1;
+   }
 
-    p->rsy = lerp(p->rsy, p->sy, 0.3);
+   U32 total_lines = 1;
+   for (U64 i = 0; i < pane->buffer.len; ++i) {
+      if (pane->buffer[i] == '\n') {
+         total_lines++;
+      }
+   }
+
+   U32 max_scroll = (total_lines > pane->rows) ? (total_lines - pane->rows) : 0;
+
+   pane->scroll_offset = MIN(pane->scroll_offset, max_scroll);
 }
-
-intern U64Offsets
-cursor_offsets(Pane *p, U64 crs)
-{
-    u32 line = 0;
-    u32 col  = 0;
-    u32 ridx = 0;
-
-    for (u64 i = 0; i < crs; ++i) {
-        if (p->buffer.data[i] == '\n') {
-            line++;
-            col = 0;
-        } else {
-            col++;
-        }
-    }
-
-    u32 ry = 0;
-    if (line > p->sy) {
-        ry = line - p->sy;
-    }
-    return (U64Offsets){.rx = col, .ry = ry, .line = line};
-}*/
 
 U64
 cursor_back(GapBuffer *buf, U64 crs)
@@ -588,14 +623,17 @@ cursor_paragraph_down(GapBuffer *buf, U64 crs)
    return crs;
 }
 
-U64
+U32
 line_indent(GapBuffer *buf, U64 crs)
 {
    U32 result = 0;
 
    U64 start = cursor_line_begin(buf, crs);
    for (U64 i = start; i < crs; ++i) {
-      if (is_whitespace((*buf)[i])) {
+      U8 c = (*buf)[i];
+      if (c == '\t') {
+         result += TAB_SIZE;
+      } else if (c == ' ') {
          result++;
       } else {
          break;

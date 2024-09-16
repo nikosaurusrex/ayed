@@ -34,6 +34,7 @@ struct GapBuffer
 struct Pane
 {
    GapBuffer buffer;
+   Arena arena;
 
    U64 cursor;
    U64 visual; // visual cursor position
@@ -47,6 +48,7 @@ struct Pane
 intern NKINLINE B32 is_whitespace(U8 c);
 
 intern GapBuffer gap_buffer_from_arena(Arena a);
+intern void load_source_file(GapBuffer *buf, String8 path, Arena *a);
 
 intern U64 insert_char(GapBuffer *buf, U8 c, U64 pos);
 intern U64 insert_string(GapBuffer *buf, String8 s, U64 pos);
@@ -59,15 +61,16 @@ intern String8 str8_from_gap_buffer(GapBuffer *buf, Arena *a);
 
 intern U64 line_length(GapBuffer *buf, U64 crs);
 
+intern Pane create_pane(U64 cap, U32 cols, U32 rows);
+intern void destroy_pane(Pane pane);
+
 // they not only move the cursor but also reset cursor_store
 intern NKINLINE void pane_cursor_back(Pane *p);
 intern NKINLINE void pane_cursor_next(Pane *p);
 intern NKINLINE void pane_set_cursor(Pane *p, U64 crs);
 intern NKINLINE void pane_reset_col_store(Pane *p);
 
-// intern void pane_update_scrolling(Pane *p, U64Offsets coff, float font_height);
-
-// intern U64Offsets cursor_offsets(Pane *p, U64 crs);
+intern void update_scroll(Pane *pane);
 
 intern U64 cursor_back(GapBuffer *buf, U64 crs);
 intern U64 cursor_next(GapBuffer *buf, U64 crs);
@@ -91,6 +94,6 @@ intern U64 cursor_next_word(GapBuffer *buf, U64 crs);
 intern U64 cursor_paragraph_up(GapBuffer *buf, U64 crs);
 intern U64 cursor_paragraph_down(GapBuffer *buf, U64 crs);
 
-intern U64 line_indent(GapBuffer *buf, U64 crs);
+intern U32 line_indent(GapBuffer *buf, U64 crs);
 
 intern U32 brace_matching_indentation(GapBuffer *buf, U64 crs);

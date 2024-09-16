@@ -117,6 +117,8 @@ SHORTCUT(delete_backwards)
       return;
    }
 
+   B32 is_newline = (*buf)[p->cursor - 1] == '\n';
+
    pane_set_cursor(p, delete_char(buf, p->cursor - 1));
    ed_on_text_change(ed);
 }
@@ -199,8 +201,8 @@ SHORTCUT(insert_mode_next)
 
 SHORTCUT(go_word_next)
 {
-Pane *p = &ed->pane;
-GapBuffer *buf = &p->buffer;
+   Pane *p = &ed->pane;
+   GapBuffer *buf = &p->buffer;
 
    pane_set_cursor(p, cursor_next_word(buf, p->cursor));
 }

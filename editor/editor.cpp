@@ -63,8 +63,11 @@ struct WinEventCtx
 
 enum
 {
-   GLYPH_INVERT = 0x1
+   GLYPH_INVERT = 0x1,
+   GLYPH_BLINK = 0x2
 };
+
+global const U32 CURSOR_STYLE = (GLYPH_INVERT | GLYPH_BLINK) << 24;
 
 intern Renderer
 create_renderer(Arena *arena)
@@ -127,11 +130,20 @@ render_pane(GlyphMap *gm, Cell *cells, Pane *pane)
 {
    GapBuffer buf = pane->buffer;
 
-   U64 pos = pane->scroll_offset;
+   U64 pos = 0;
 
    U32 cell_index = 0;
    U32 row = 0;
    U32 col = 0;
+
+   U64 lines_skipped = 0;
+   while (lines_skipped < pane->scroll_offset && pos < buf.len) {
+      if (buf[pos] == '\n') {
+         lines_skipped++;
+      }
+      pos++;
+   }
+
    for (row = 0; row < pane->rows && pos < buf.len; ++row) {
       col = 0;
 
@@ -140,7 +152,7 @@ render_pane(GlyphMap *gm, Cell *cells, Pane *pane)
 
          if (codepoint == '\n') {
             if (pos == pane->cursor) {
-               cells[cell_index].bg |= GLYPH_INVERT << 24;
+               cells[cell_index].bg |= CURSOR_STYLE;
             }
 
             pos++;
@@ -149,7 +161,7 @@ render_pane(GlyphMap *gm, Cell *cells, Pane *pane)
          } else if (codepoint == '\t') {
             if (pos == pane->cursor) {
                for (U32 i = 0; i < TAB_SIZE; ++i) {
-                  cells[cell_index + i].bg |= GLYPH_INVERT << 24;
+                  cells[cell_index + i].bg |= CURSOR_STYLE;
                }
             }
 
@@ -164,7 +176,7 @@ render_pane(GlyphMap *gm, Cell *cells, Pane *pane)
             cells[cell_index].bg = 0x00000000;
 
             if (pos == pane->cursor) {
-               cells[cell_index].bg |= GLYPH_INVERT << 24;
+               cells[cell_index].bg |= CURSOR_STYLE;
             }
 
             cell_index++;
@@ -330,6 +342,22 @@ update_glyph_map_texture(GLuint tex, GlyphMap *gm)
 }
 
 intern void
+load_file(Editor *ed, String8 path, Arena *arena)
+{
+   Pane p = ed->pane;
+   U32 rows = p.rows;
+   U32 cols = p.cols;
+
+   destroy_pane(p);
+
+   Pane np = create_pane(MEGA_BYTES(512), cols, rows);
+
+   load_source_file(&np.buffer, path, arena);
+
+   ed->pane = np;
+}
+
+intern void
 dispatch_key_event(Editor *ed)
 {
    InputEvent event  = ed->last_input_event;
@@ -459,17 +487,10 @@ main(int argc, char **argv)
    Arena cell_arena = {};
    sub_arena(&cell_arena, &arena, MEGA_BYTES(512));
 
-   Arena buffer_arena = {};
-   sub_arena(&buffer_arena, &arena, MEGA_BYTES(512));
-
    Arena general_arena = {};
    sub_arena(&general_arena, &arena, MEGA_BYTES(512));
 
-   GapBuffer buf = gap_buffer_from_arena(buffer_arena);
-   // insert_string(&buf, String8("int main() {\n\treturn 0;\n}"), 0);
-
-   Pane pane = {};
-   pane.buffer = buf;
+   Pane pane = create_pane(MEGA_BYTES(512), 0, 0);
 
    Editor editor = {};
    editor.mode = ED_NORMAL;
@@ -478,7 +499,7 @@ main(int argc, char **argv)
    create_default_keymaps(&editor, &general_arena);
    
    FT_Library freetype = init_freetype();
-   GlyphMap glyph_map = load_glyphmap(&arena, "assets/consolas.ttf", 18, freetype);
+   GlyphMap glyph_map = load_glyphmap(&arena, "assets/consolas.ttf", 16, freetype);
 
    Window window = {};
    init_window(&window, "Ayed");
@@ -486,6 +507,7 @@ main(int argc, char **argv)
    init_gfx();
 
    GFX_Shader compute_shader = load_compute_shader(String8("assets/compute_shader.glsl"), &arena);
+
    Renderer renderer = create_renderer(&arena);
 
    OutputTexture output_texture = create_output_texture();
@@ -522,6 +544,10 @@ main(int argc, char **argv)
    set_window_callbacks(&window, win_callbacks);
    on_resize(&win_event_ctx, window.width, window.height);
 
+   load_file(&editor, String8("editor/editor.cpp"), &general_arena);
+
+//   glfwSwapInterval(0);
+
    U64 fps = 0;
    double last_time_fps = glfwGetTime();
 
@@ -529,19 +555,17 @@ main(int argc, char **argv)
       glClear(GL_COLOR_BUFFER_BIT);
 
       render_to_cells(&glyph_map, cells, &render_size, &editor);
-
       render_to_texture(compute_shader, output_texture, glyph_map_texture);
       render_to_screen(renderer, output_texture);
 
       double now_time_fps = glfwGetTime();
       double delta_time_fps = now_time_fps - last_time_fps;
       if (delta_time_fps >= 1.0) {
-
          char buf[128];
 
          double mspf = (delta_time_fps * 1000) / (double)fps;
 
-         sprintf(buf, "Ayed %llu FPS, %f ms/f", fps, mspf);
+         snprintf(buf, sizeof(buf), "Ayed %llu FPS, %f ms/f", fps, mspf);
          glfwSetWindowTitle(window.handle, buf);
          last_time_fps = now_time_fps;
          fps = 0;
