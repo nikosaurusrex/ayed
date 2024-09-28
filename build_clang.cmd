@@ -1,7 +1,7 @@
 @echo off
 
-set CFLAGS=-Wall -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-char-subscripts -std=c++20
-set DEBUG_FLAGS=-DBUILD_DEBUG -g
+set CFLAGS=-Weverything -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-char-subscripts -std=c++20
+set DEBUG_FLAGS=-DBUILD_DEBUG -g3
 
 set RELEASE_FLAGS_ARM64=-O2 -flto
 set RELEASE_FLAGS_X64=-O2 -flto
