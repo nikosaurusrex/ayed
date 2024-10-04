@@ -78,4 +78,4 @@ struct String8
 // returned pointer has to be free'd
 intern char *cstr_from_str8(String8 s);
 
-read_only String8 null_str8 = {0, 0};
+const String8 null_str8 = {0, 0};

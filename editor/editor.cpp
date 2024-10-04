@@ -419,7 +419,7 @@ on_key_event(void *_ctx, int key, int scancode, int action, int mods)
       break;
    }
 
-   U16 kcomb = key;
+   U32 kcomb = key;
    if (mods & GLFW_MOD_CONTROL) {
       kcomb |= CTRL;
    }
@@ -482,13 +482,13 @@ int
 main(int argc, char **argv)
 {
    Arena arena = {};
-   init_arena(&arena, GIGA_BYTES(2));
+   init_arena(&arena, GIGA_BYTES(4));
 
    Arena cell_arena = {};
    sub_arena(&cell_arena, &arena, MEGA_BYTES(512));
 
    Arena general_arena = {};
-   sub_arena(&general_arena, &arena, MEGA_BYTES(512));
+   sub_arena(&general_arena, &arena, GIGA_BYTES(2));
 
    Pane pane = create_pane(MEGA_BYTES(512), 0, 0);
 

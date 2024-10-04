@@ -181,7 +181,8 @@ SHORTCUT(insert_end_of_line)
    Pane *p = &ed->pane;
    GapBuffer *buf = &p->buffer;
 
-   pane_set_cursor(p, cursor_line_end(buf, p->cursor));
+   U64 end = cursor_line_end(buf, p->cursor);
+   pane_set_cursor(p, end);
    ed->mode = ED_INSERT;
 }
 
@@ -294,7 +295,7 @@ SHORTCUT(normal_handle)
 
    InputEvent input_event = ed->last_input_event;
    char       ch          = input_event.ch;
-   U16        key_comb    = input_event.key_comb;
+   U32        key_comb    = input_event.key_comb;
 
    if (key_comb & CTRL) {
       normal_buffer[normal_index] = '^';
@@ -494,7 +495,7 @@ normal_mode_get_shortcut(Editor *ed, Shortcut *shortcut)
 }
 
 Shortcut *
-keymap_get_shortcut(Keymap *km, U16 key_comb)
+keymap_get_shortcut(Keymap *km, U32 key_comb)
 {
    ASSERT(key_comb <= MAX_KEY_COMBINATIONS);
 

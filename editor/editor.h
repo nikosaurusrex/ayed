@@ -21,7 +21,7 @@ enum
 
 struct InputEvent
 {
-   U16 key_comb;
+   U32 key_comb;
    U8 type;
    U8 ch;
 };

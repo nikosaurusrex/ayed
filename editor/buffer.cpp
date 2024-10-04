@@ -94,9 +94,22 @@ load_source_file(GapBuffer *buf, String8 path, Arena *a)
       return;
    }
 
-   MEM_COPY(buf->ptr, content.ptr, content.len);
-   buf->len = content.len;
-   buf->start = content.len;
+   // remove carriage returns
+   U8 *src = content.ptr;
+   U8 *src_end = content.ptr + content.len;
+   U8 *dst = buf->ptr;
+   while (src < src_end) {
+      if (*src != '\r') {
+         *dst = *src;
+         dst++;
+         buf->start++;
+         buf->len++;
+      }
+      src++;
+   }
+
+   buf->ptr[buf->len] = 0;
+
    buf->end = buf->start + MAX_GAP_SIZE;
 
    end_temp_arena(temp);
@@ -409,7 +422,7 @@ cursor_line_end(GapBuffer *buf, U64 crs)
    while (crs < buf->len) {
       U8 ch = (*buf)[crs];
       if (ch == '\n') {
-         return crs - 1;
+         return crs;
       }
 
       crs = cursor_next(buf, crs);

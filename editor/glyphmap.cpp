@@ -1,5 +1,5 @@
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "vendor/stb/stb_image_write.h"
+/* #define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "vendor/stb/stb_image_write.h" */
 
 #include "base/base_inc.h"
 
@@ -123,7 +123,7 @@ load_glyphmap(Arena *arena, const char *font_name, U32 font_size, FT_Library fre
       }
    }
 
-   stbi_write_jpg("out.jpg", gm.width / 3, gm.height, 3, gm.data, 100);
+   // stbi_write_jpg("out.jpg", gm.width / 3, gm.height, 3, gm.data, 100);
 
    return gm;
 }

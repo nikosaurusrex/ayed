@@ -15,7 +15,7 @@ struct Keymap {
    Shortcut shortcuts[MAX_KEY_COMBINATIONS];
 };
 
-intern Shortcut *keymap_get_shortcut(Keymap *km, U16 key_comb);
+intern Shortcut *keymap_get_shortcut(Keymap *km, U32 key_comb);
 
 intern Keymap *keymap_create_empty(Arena *a);
 intern void    create_default_keymaps(Editor *ed, Arena *a);

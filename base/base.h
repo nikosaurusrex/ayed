@@ -22,6 +22,9 @@ typedef int32_t  B32;
 #define global static
 #define intern static
 
+// TODO fix
+#define read_only const
+#if 0
 #if COMPILER_MSVC || (COMPILER_CLANG && OS_WINDOWS)
 #pragma section(".rdata$", read)
 #define read_only __declspec(allocate(".rdata$"))
@@ -29,6 +32,7 @@ typedef int32_t  B32;
 #define read_only __attribute__((section(".rodata")))
 #else
 #define read_only const
+#endif
 #endif
 
 #if COMPILER_MSVC
