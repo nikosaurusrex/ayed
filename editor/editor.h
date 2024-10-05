@@ -34,9 +34,16 @@ struct Editor
    Pane pane;
 };
 
+struct Edit
+{
+   U64 pos_before;
+   U64 pos_after;
+};
+
 enum
 {
    TAB_SIZE = 3
 };
 
-intern void ed_on_text_change(Editor *ed);
+intern void highlight(Pane *p);
+intern void ed_on_text_change(Editor *ed, Edit edit);

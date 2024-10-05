@@ -11,3 +11,5 @@ compile_flags.txt
 out.jpg
 .vs
 *.rdi
+*.lib
+treesitter.o

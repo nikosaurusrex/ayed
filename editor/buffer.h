@@ -31,11 +31,23 @@ struct GapBuffer
    }
 };
 
+struct TSParser;
+struct TSTree;
+struct TSQuery;
+struct SyntaxHighlighter
+{
+   TSParser *parser;
+   TSTree *tree;
+   TSQuery *query;
+};
+
 struct Pane
 {
    GapBuffer buffer;
+   SyntaxHighlighter highlighter;
    Arena arena;
 
+   U64 prev_cursor; // for treesitter
    U64 cursor;
    U64 visual; // visual cursor position
    S64 cursor_store; // cursor column position to restore after moving up/down
@@ -64,9 +76,14 @@ intern U64 line_length(GapBuffer *buf, U64 crs);
 intern Pane create_pane(U64 cap, U32 cols, U32 rows);
 intern void destroy_pane(Pane pane);
 
+intern SyntaxHighlighter create_syntax_highlighter();
+intern void destroy_syntax_highlighter(SyntaxHighlighter hl);
+intern void update_syntax_highlighting(Pane *p, Arena *a);
+
 // they not only move the cursor but also reset cursor_store
 intern NKINLINE void pane_cursor_back(Pane *p);
 intern NKINLINE void pane_cursor_next(Pane *p);
+intern NKINLINE void _pane_set_cursor(Pane *p, U64 c);
 intern NKINLINE void pane_set_cursor(Pane *p, U64 crs);
 intern NKINLINE void pane_reset_col_store(Pane *p);
 

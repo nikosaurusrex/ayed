@@ -2,10 +2,14 @@
 
 #include "editor.h"
 
+#include "tree_sitter/api.h"
+
 enum
 {
    MAX_GAP_SIZE = 16
 };
+
+extern "C" const TSLanguage *tree_sitter_cpp(void);
 
 intern NKINLINE int
 char_type(U8 c)
@@ -251,18 +255,19 @@ delete_chars(GapBuffer *buf, U64 pos, U64 n)
 String8
 str8_from_gap_buffer(GapBuffer *buf, Arena *a)
 {
-   String8 s = {};   
-   s.ptr = push_array(a, U8, buf->len);
+   String8 s = {};
+   s.ptr = push_array(a, U8, buf->len + 1);
    s.len = buf->len;
 
-   for (U64 i = 0; i < MIN(buf->start, buf->len); ++i) {
-      s[i] = buf->ptr[i];
+   if (buf->start > 0) {
+      MEM_COPY(s.ptr, buf->ptr, buf->start);
    }
 
-   U64 gap_size = buf->end - buf->start;
-   for (U64 i = buf->end; i < buf->len + gap_size; ++i) {
-      s[i - gap_size] = buf->ptr[i];
+   U64 spl = buf->len - buf->start;
+   if (spl > 0) {
+      MEM_COPY(s.ptr + buf->start, buf->ptr + buf->end, spl);
    }
+   s.ptr[s.len] = 0;
 
    return s;
 }
@@ -283,6 +288,7 @@ create_pane(U64 cap, U32 cols, U32 rows)
    init_arena(&p.arena, cap);
 
    p.buffer = gap_buffer_from_arena(p.arena);
+   p.highlighter = create_syntax_highlighter();
 
    return p;
 }
@@ -290,7 +296,60 @@ create_pane(U64 cap, U32 cols, U32 rows)
 void
 destroy_pane(Pane p)
 {
+   destroy_syntax_highlighter(p.highlighter);
    free_arena(&p.arena, p.arena.size);
+}
+
+SyntaxHighlighter
+create_syntax_highlighter()
+{
+   SyntaxHighlighter hl = {};
+
+   hl.parser = ts_parser_new();
+
+   const TSLanguage *lang = tree_sitter_cpp();
+   ts_parser_set_language(hl.parser, lang);
+
+   const char *query_string = 
+        "(function_definition) @function "
+        "(string_literal) @string "
+        "(number_literal) @number "
+        "(comment) @comment";
+    
+   U32 error_offset;
+   TSQueryError error_type;
+   hl.query = ts_query_new(lang, query_string, strlen(query_string), &error_offset, &error_type);
+   
+   if (!hl.query) {
+      log_fatal("failed to create highlighting query");
+   }
+
+   return hl;
+}
+
+void
+destroy_syntax_highlighter(SyntaxHighlighter hl)
+{
+   ts_query_delete(hl.query);
+   ts_tree_delete(hl.tree);
+   ts_parser_delete(hl.parser);
+}
+
+void
+update_syntax_highlighting(Pane *p, Arena *a)
+{
+   SyntaxHighlighter *hl = &p->highlighter;
+
+   String8 src = str8_from_gap_buffer(&p->buffer, a);
+
+   if (hl->tree) {
+      TSTree *new_tree = ts_parser_parse_string(hl->parser, hl->tree, (const char *) src.ptr, (U32) src.len);
+
+      ts_tree_delete(hl->tree);
+      hl->tree = new_tree;
+   } else {
+      hl->tree = ts_parser_parse_string(hl->parser, 0, (const char *) src.ptr, (U32) src.len);
+   }
 }
 
 void

@@ -5,6 +5,8 @@
 #include FT_FREETYPE_H
 #include FT_LCD_FILTER_H
 
+#include "tree_sitter/api.h"
+
 #include "base/base_inc.h"
 #include "window.h"
 #include "gfx.h"
@@ -59,6 +61,12 @@ struct WinEventCtx
    Cell *cells;
    Editor *editor;
    Window *window;
+};
+
+struct EditPoints {
+   TSPoint start_point;
+   TSPoint old_end_point;
+   TSPoint new_end_point;
 };
 
 enum
@@ -123,6 +131,24 @@ destroy_renderer(Renderer r)
    glDeleteVertexArrays(1, &r.vao);
    glDeleteBuffers(1, &r.vbo);
    glDeleteBuffers(1, &r.ebo);
+}
+
+intern void
+apply_syntax_highlighting(Pane *p)
+{
+   SyntaxHighlighter *hl = &p->highlighter;
+
+   if (!hl->tree) {
+      return;
+   }
+
+   TSNode root_node = ts_tree_root_node(hl->tree);
+
+/*
+   char *string = ts_node_string(root_node);
+   printf("Syntax tree: %s\n", string);
+
+   free(string);*/
 }
 
 intern void
@@ -199,6 +225,7 @@ render_to_cells(GlyphMap *gm, Cell *cells, RenderSize *rs, Editor *ed)
 
    Pane *pane = &ed->pane;
 
+   apply_syntax_highlighting(pane);
    render_pane(gm, cells, pane);
 
    glBufferData(GL_SHADER_STORAGE_BUFFER, cells_size, cells, GL_DYNAMIC_DRAW);
@@ -238,6 +265,7 @@ render_to_texture(GFX_Shader compute_shader, OutputTexture tex, GLuint glyph_map
    glBindTexture(GL_TEXTURE_2D, 0);
    glUseProgram(0);
 }
+
 
 intern void
 init_render_size(RenderSize *rs, GFX_Shader s)
@@ -474,8 +502,98 @@ on_char_event(void *_ctx, unsigned int codepoint)
    dispatch_key_event(ed);
 }
 
+intern EditPoints
+byte_offsets_to_points(GapBuffer *_buf, U32 start_byte, U32 old_end_byte, U32 new_end_byte)
+{
+   EditPoints points = {};
+   const GapBuffer buf = *_buf;
+
+   U32 row = 0;
+   U32 column = 0;
+   U32 byte_index = 0;
+   bool start_found = false;
+   bool old_end_found = false;
+   bool new_end_found = false;
+
+   while (byte_index < buf.len && !(start_found && old_end_found && new_end_found)) {
+      if (byte_index == start_byte) {
+         points.start_point.row = row;
+         points.start_point.column = column;
+         start_found = true;
+      }
+
+      if (byte_index == old_end_byte) {
+         points.old_end_point.row = row;
+         points.old_end_point.column = column;
+         old_end_found = true;
+      }
+
+      if (byte_index == new_end_byte) {
+         points.new_end_point.row = row;
+         points.new_end_point.column = column;
+         new_end_found = true;
+      }
+
+      if (buf[byte_index] == '\n') {
+         row++;
+         column = 0;
+      } else {
+         column++;
+      }
+
+      byte_index++;
+   }
+
+   if (!old_end_found) {
+      points.old_end_point.row = row;
+      points.old_end_point.column = column;
+   }
+
+   if (!new_end_found) {
+      points.new_end_point.row = row;
+      points.new_end_point.column = column;
+   }
+   
+   return points;
+}
+
 void
-ed_on_text_change(Editor *ed) {
+ed_on_text_change(Editor *ed, Edit edit) {
+   Pane *p = &ed->pane;
+   SyntaxHighlighter *hl = &p->highlighter;
+
+   if (hl->tree) {
+      U32 start_byte = 0;
+      U32 old_end_byte = 0;
+      U32 new_end_byte = 0;
+
+      if (edit.pos_after > edit.pos_before) {
+         start_byte = U32(edit.pos_before);
+         old_end_byte = start_byte;
+         new_end_byte = U32(edit.pos_after);
+      } else {
+         start_byte = U32(edit.pos_after);
+         old_end_byte = U32(edit.pos_before);
+         new_end_byte = start_byte;
+      }
+
+      EditPoints points = byte_offsets_to_points(&p->buffer, start_byte, old_end_byte, new_end_byte);
+
+      const TSInputEdit tsie = {
+         start_byte,
+         old_end_byte,
+         new_end_byte,
+         points.start_point,
+         points.old_end_point,
+         points.new_end_point
+      };
+
+      ts_tree_edit(hl->tree, &tsie);
+   }
+
+   TempArena temp = begin_temp_arena(&p->arena);
+   update_syntax_highlighting(p, temp.arena);
+   end_temp_arena(temp);
 }
 
 int
@@ -490,7 +608,7 @@ main(int argc, char **argv)
    Arena general_arena = {};
    sub_arena(&general_arena, &arena, GIGA_BYTES(2));
 
-   Pane pane = create_pane(MEGA_BYTES(512), 0, 0);
+   Pane pane = create_pane(GIGA_BYTES(1), 0, 0);
 
    Editor editor = {};
    editor.mode = ED_NORMAL;
@@ -544,9 +662,9 @@ main(int argc, char **argv)
    set_window_callbacks(&window, win_callbacks);
    on_resize(&win_event_ctx, window.width, window.height);
 
-   load_file(&editor, String8("editor/editor.cpp"), &general_arena);
+   // load_file(&editor, String8("editor/editor.cpp"), &general_arena);
 
-//   glfwSwapInterval(0);
+   glfwSwapInterval(1);
 
    U64 fps = 0;
    double last_time_fps = glfwGetTime();

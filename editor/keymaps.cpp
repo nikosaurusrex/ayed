@@ -33,8 +33,10 @@ SHORTCUT(insert_char)
    GapBuffer *buf = &p->buffer;
 
    U8 ch       = input_event.ch;
+
+   U64 cursor_before = p->cursor;
    p->cursor = insert_char(&p->buffer, ch, p->cursor);
-   ed_on_text_change(ed);
+   ed_on_text_change(ed, {cursor_before, p->cursor});
 
    if (ch == '}') {
       U32 indent = brace_matching_indentation(buf, p->cursor);
@@ -51,8 +53,9 @@ SHORTCUT(insert_char)
 
       if (leading > indent) {
          U32 del = leading - indent;
-         delete_chars(buf, start, del);
-         ed_on_text_change(ed);
+
+         U64 end = delete_chars(buf, start, del);
+         ed_on_text_change(ed, {start, end});
 
          pane_set_cursor(p, start + indent + 1);
       }
@@ -104,8 +107,9 @@ SHORTCUT(delete_forwards)
    Pane *p = &ed->pane;
    GapBuffer *buf = &p->buffer;
 
+   U64 before = p->cursor;
    pane_set_cursor(p, delete_char(buf, p->cursor));
-   ed_on_text_change(ed);
+   ed_on_text_change(ed, {before, p->cursor});
 }
 
 SHORTCUT(delete_backwards)
@@ -119,8 +123,9 @@ SHORTCUT(delete_backwards)
 
    B32 is_newline = (*buf)[p->cursor - 1] == '\n';
 
+   U64 before = p->cursor;
    pane_set_cursor(p, delete_char(buf, p->cursor - 1));
-   ed_on_text_change(ed);
+   ed_on_text_change(ed, {before, p->cursor});
 }
 
 SHORTCUT(insert_new_line)
@@ -128,8 +133,9 @@ SHORTCUT(insert_new_line)
    Pane *p = &ed->pane;
    GapBuffer *buf = &p->buffer;
 
+   U64 before = p->cursor;
    pane_set_cursor(p, insert_line(&p->buffer, p->cursor, 1));
-   ed_on_text_change(ed);
+   ed_on_text_change(ed, {before, p->cursor});
 }
 
 SHORTCUT(insert_tab)
@@ -137,8 +143,9 @@ SHORTCUT(insert_tab)
    Pane *p = &ed->pane;
    GapBuffer *buf = &p->buffer;
 
+   U64 before = p->cursor;
    pane_set_cursor(p, insert_char(buf, '\t', p->cursor));
-   ed_on_text_change(ed);
+   ed_on_text_change(ed, {before, p->cursor});
 }
 
 SHORTCUT(normal_mode)
@@ -245,9 +252,10 @@ SHORTCUT(new_line_before)
    Pane *p = &ed->pane;
    GapBuffer *buf = &p->buffer;
 
+   U64 before = p->cursor;
    p->cursor = cursor_prev_line_end(buf, p->cursor);
    pane_set_cursor(p, insert_line(buf, p->cursor, 1));
-   ed_on_text_change(ed);
+   ed_on_text_change(ed, {before, p->cursor});
    ed->mode = ED_INSERT;
 }
 
@@ -256,9 +264,10 @@ SHORTCUT(new_line_after)
    Pane *p = &ed->pane;
    GapBuffer *buf = &p->buffer;
 
+   U64 before = p->cursor;
    p->cursor = cursor_line_end(buf, p->cursor);
    pane_set_cursor(p, insert_line(buf, p->cursor, 1));
-   ed_on_text_change(ed);
+   ed_on_text_change(ed, {before, p->cursor});
    ed->mode = ED_INSERT;
 }
 
