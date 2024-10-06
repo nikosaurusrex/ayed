@@ -32,6 +32,7 @@ struct Editor
    InputEvent last_input_event;
    U8 mode;
    Pane pane;
+   Arena *general_arena;
 };
 
 struct Edit

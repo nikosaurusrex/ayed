@@ -196,13 +196,14 @@ insert_line(GapBuffer *buf, U64 pos, B32 auto_indent)
 
       pos = insert_char(buf, '\n', pos);
 
+   /*
       for (U64 i = 0; i < indent / TAB_SIZE; ++i) {
          pos = insert_char(buf, '\t', pos);
       }
 
       for (U64 i = 0; i < indent % TAB_SIZE; ++i) {
          pos = insert_char(buf, ' ', pos);
-      }
+      }*/
    } else {
       pos = insert_char(buf, '\n', pos);
    }
@@ -310,15 +311,13 @@ create_syntax_highlighter()
    const TSLanguage *lang = tree_sitter_cpp();
    ts_parser_set_language(hl.parser, lang);
 
-   const char *query_string = 
-        "(function_definition) @function "
-        "(string_literal) @string "
-        "(number_literal) @number "
-        "(comment) @comment";
+   const char *query_string =
+      "(comment) @comment "
+      "(identifier) @variable";
     
    U32 error_offset;
    TSQueryError error_type;
-   hl.query = ts_query_new(lang, query_string, strlen(query_string), &error_offset, &error_type);
+   hl.query = ts_query_new(lang, query_string, U32(strlen(query_string)), &error_offset, &error_type);
    
    if (!hl.query) {
       log_fatal("failed to create highlighting query");

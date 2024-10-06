@@ -44,6 +44,11 @@ struct RenderSize
    GLuint grid_size_loc;
 };
 
+struct RenderRange {
+   U64 from;
+   U64 to;
+};
+
 struct Cell
 {
    U32 glyph;
@@ -134,7 +139,7 @@ destroy_renderer(Renderer r)
 }
 
 intern void
-apply_syntax_highlighting(Pane *p)
+apply_syntax_highlighting(Pane *p, Cell *cells, U32 start_row, U32 end_row, RenderRange range)
 {
    SyntaxHighlighter *hl = &p->highlighter;
 
@@ -143,18 +148,47 @@ apply_syntax_highlighting(Pane *p)
    }
 
    TSNode root_node = ts_tree_root_node(hl->tree);
+   TSQueryCursor *cursor = ts_query_cursor_new();
 
-/*
-   char *string = ts_node_string(root_node);
-   printf("Syntax tree: %s\n", string);
+   ts_query_cursor_set_byte_range(cursor, U32(range.from), U32(range.to));
 
-   free(string);*/
+   ts_query_cursor_exec(cursor, hl->query, root_node);
+
+   TSQueryMatch match;
+   while (ts_query_cursor_next_match(cursor, &match)) {
+      for (U32 i = 0; i < match.capture_count; i++) {
+         TSNode node = match.captures[i].node;
+         TSPoint start = ts_node_start_point(node);
+         TSPoint end = ts_node_end_point(node);
+         
+         U32 start_index = (start.row - start_row) * p->cols + start.column;
+         U32 end_index = (end.row - start_row) * p->cols + end.column;
+         
+
+         U32 color;
+         switch (match.pattern_index) {
+            case 0: color = 0x00FF0000; break; // type
+            case 1: color = 0x0000FF00; break; // function
+            case 2: color = 0x000000FF; break; // keyword
+            case 3: color = 0x00808080; break; // operator
+            default: continue;
+         }
+         
+         for (U32 j = start_index; j < end_index && j < p->cols * (end_row - start_row); j++) {
+            cells[j].fg = color;
+         }
+      }
+   }
+   
+   ts_query_cursor_delete(cursor);
 }
 
-intern void
+intern RenderRange
 render_pane(GlyphMap *gm, Cell *cells, Pane *pane)
 {
-   GapBuffer buf = pane->buffer;
+   RenderRange range = {};
+
+   const GapBuffer buf = pane->buffer;
 
    U64 pos = 0;
 
@@ -169,6 +203,8 @@ render_pane(GlyphMap *gm, Cell *cells, Pane *pane)
       }
       pos++;
    }
+
+   range.from = pos;
 
    for (row = 0; row < pane->rows && pos < buf.len; ++row) {
       col = 0;
@@ -215,6 +251,10 @@ render_pane(GlyphMap *gm, Cell *cells, Pane *pane)
    if (pos == pane->cursor && col < pane->cols && row < pane->rows) {
       cells[cell_index].bg |= GLYPH_INVERT << 24;
    }
+
+   range.to = pos;
+
+   return range;
 }
 
 intern void
@@ -225,8 +265,8 @@ render_to_cells(GlyphMap *gm, Cell *cells, RenderSize *rs, Editor *ed)
 
    Pane *pane = &ed->pane;
 
-   apply_syntax_highlighting(pane);
-   render_pane(gm, cells, pane);
+   RenderRange range = render_pane(gm, cells, pane);
+   apply_syntax_highlighting(pane, cells, pane->scroll_offset, pane->scroll_offset + pane->rows, range);
 
    glBufferData(GL_SHADER_STORAGE_BUFFER, cells_size, cells, GL_DYNAMIC_DRAW);
 }
@@ -591,7 +631,7 @@ ed_on_text_change(Editor *ed, Edit edit) {
       ts_tree_edit(hl->tree, &tsie);
    }
 
-   TempArena temp = begin_temp_arena(&p->arena);
+   TempArena temp = begin_temp_arena(ed->general_arena);
    update_syntax_highlighting(p, temp.arena);
    end_temp_arena(temp);
 }
@@ -613,6 +653,7 @@ main(int argc, char **argv)
    Editor editor = {};
    editor.mode = ED_NORMAL;
    editor.pane = pane;
+   editor.general_arena = &general_arena;
 
    create_default_keymaps(&editor, &general_arena);
    
@@ -662,7 +703,7 @@ main(int argc, char **argv)
    set_window_callbacks(&window, win_callbacks);
    on_resize(&win_event_ctx, window.width, window.height);
 
-   // load_file(&editor, String8("editor/editor.cpp"), &general_arena);
+   load_file(&editor, String8("editor/editor.cpp"), &general_arena);
 
    glfwSwapInterval(1);
 
